@@ -1,82 +1,172 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="id">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-  <link rel="manifest" href="manifest.json">
-  <title>iPad Photobooth</title>
+  <link rel="manifest" href="manifest.json" />
+  <title>iPad Photobooth (Zoom Focus Mode)</title>
   <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; font-family: system-ui, sans-serif; }
-    body { background: #111; color: #fff; height: 100vh; overflow: hidden; display: flex; flex-direction: column; }
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: system-ui, -apple-system, sans-serif; }
+    body { background: #0b0b0d; color: #fff; height: 100vh; overflow: hidden; display: flex; flex-direction: column; user-select: none; }
     
-    /* Main Booth View */
-    #booth-view { position: relative; flex: 1; display: flex; align-items: center; justify-content: center; background: #000; }
-    video { width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); } /* Mirror front camera */
-    #frame-overlay { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; pointer-events: none; z-index: 5; }
+    /* Main Interactive Booth */
+    #booth-view { 
+      position: relative; 
+      flex: 1; 
+      display: flex; 
+      align-items: center; 
+      justify-content: center; 
+      background: #000; 
+      overflow: hidden; 
+    }
+
+    /* Kunci Rasio 4R Portrait (2:3) untuk area visualisasi */
+    #booth-container {
+      position: relative;
+      width: auto;
+      height: 92%;
+      aspect-ratio: 2 / 3;
+      background: #2b2b36;
+      overflow: hidden;
+      box-shadow: 0 10px 40px rgba(0,0,0,0.8);
+      border-radius: 16px;
+      transition: transform 0.8s cubic-bezier(0.25, 1, 0.5, 1); /* Efek zoom-in yang smooth */
+    }
+
+    /* Kamera di bawah overlay */
+    video { 
+      position: absolute;
+      top: 0; left: 0;
+      width: 100%; height: 100%; 
+      object-fit: cover; 
+      transform: scaleX(-1); /* Mirror camera */
+      z-index: 1;
+      transition: transform 0.8s cubic-bezier(0.25, 1, 0.5, 1), top 0.8s cubic-bezier(0.25, 1, 0.5, 1);
+    }
+
+    /* Overlay Frame Transparan Live saat foto */
+    #live-overlay { 
+      position: absolute; 
+      top: 0; left: 0; 
+      width: 100%; height: 100%; 
+      object-fit: contain; 
+      pointer-events: none; 
+      z-index: 3; 
+    }
+
+    /* Indicator Status Pose */
+    #pose-status { 
+      position: absolute; 
+      top: 20px; left: 50%; 
+      transform: translateX(-50%);
+      background: rgba(255, 59, 92, 0.95); 
+      color: #fff;
+      padding: 8px 24px; 
+      border-radius: 30px; 
+      font-size: 1.2rem; 
+      font-weight: 800; 
+      z-index: 10; 
+      display: none; 
+      box-shadow: 0 4px 15px rgba(255,59,92,0.4);
+    }
+
+    /* Shutter Flash & Countdown */
+    #countdown { 
+      position: absolute; 
+      font-size: 10rem; 
+      font-weight: 900; 
+      text-shadow: 0 6px 30px rgba(0,0,0,0.9); 
+      z-index: 15; 
+      display: none; 
+      color: #ff3b5c; 
+    }
+    #flash { position: fixed; inset: 0; background: #fff; opacity: 0; pointer-events: none; z-index: 50; transition: opacity 0.15s ease-out; }
     
-    #countdown { position: absolute; font-size: 10rem; font-weight: 900; text-shadow: 0 4px 30px rgba(0,0,0,0.9); z-index: 10; display: none; color: #ff3b5c; }
-    #controls { position: absolute; bottom: 35px; display: flex; gap: 20px; z-index: 10; }
-    button { padding: 18px 36px; font-size: 1.3rem; font-weight: bold; border: none; border-radius: 50px; cursor: pointer; transition: transform 0.1s; }
+    #controls { position: absolute; bottom: 20px; z-index: 10; }
+    button { padding: 18px 45px; font-size: 1.4rem; font-weight: bold; border: none; border-radius: 50px; cursor: pointer; transition: transform 0.1s; }
     button:active { transform: scale(0.95); }
-    #snap-btn { background: #ff3b5c; color: white; box-shadow: 0 4px 20px rgba(255,59,92,0.6); }
+    #snap-btn { background: #ff3b5c; color: white; box-shadow: 0 4px 25px rgba(255,59,92,0.6); }
     
-    /* Hidden Admin Trigger (Top-Left Corner) */
+    /* Hidden Admin Trigger */
     #admin-trigger { position: absolute; top: 0; left: 0; width: 100px; height: 100px; z-index: 25; }
 
-    /* Result Preview Modal */
-    #preview-modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.95); flex-direction: column; align-items: center; justify-content: center; z-index: 30; padding: 20px; }
-    #result-preview { max-height: 72vh; border-radius: 12px; margin-bottom: 25px; box-shadow: 0 10px 40px rgba(0,0,0,0.8); }
+    /* Preview Pop-up */
+    #preview-modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.95); flex-direction: column; align-items: center; justify-content: center; z-index: 45; padding: 20px; }
+    #result-preview { max-height: 75vh; border-radius: 8px; margin-bottom: 24px; box-shadow: 0 10px 40px rgba(0,0,0,0.8); background: #fff; }
     .action-btns { display: flex; gap: 15px; }
 
     /* Admin Panel */
-    #admin-panel { display: none; position: fixed; inset: 0; background: #1e1e24; padding: 40px; z-index: 40; overflow-y: auto; }
-    .admin-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px; border-bottom: 1px solid #333; padding-bottom: 15px; }
-    .card { background: #2b2b36; padding: 24px; border-radius: 16px; margin-bottom: 20px; box-shadow: 0 4px 12px rgba(0,0,0,0.3); }
-    .card h3 { margin-bottom: 10px; font-size: 1.2rem; }
-    input[type="file"] { margin-top: 12px; display: block; color: #aaa; }
+    #admin-panel { display: none; position: fixed; inset: 0; background: #141419; padding: 32px; z-index: 40; overflow-y: auto; }
+    .admin-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; border-bottom: 1px solid #333; padding-bottom: 15px; }
+    .card { background: #22222b; padding: 22px; border-radius: 16px; margin-bottom: 20px; }
+    .card h3 { margin-bottom: 12px; font-size: 1.15rem; color: #fff; }
+    .row { display: flex; gap: 16px; align-items: center; margin-top: 12px; flex-wrap: wrap; }
+    input[type="number"], input[type="color"] { background: #141419; border: 1px solid #444; color: #fff; padding: 8px 12px; border-radius: 8px; font-size: 1rem; }
+    
+    @media print {
+      body * { visibility: hidden; }
+      #result-preview, #result-preview * { visibility: visible; }
+      #result-preview { position: fixed; inset: 0; width: 100%; height: 100%; object-fit: contain; margin: 0; }
+    }
   </style>
 </head>
 <body>
 
-  <!-- Secret 3-tap corner to open Admin -->
+  <div id="flash"></div>
   <div id="admin-trigger"></div>
 
-  <!-- Live Booth Screen -->
+  <!-- Live Area yang Dikunci 4R -->
   <div id="booth-view">
-    <video id="camera" autoplay playsinline></video>
-    <img id="frame-overlay" alt="" />
-    <div id="countdown">3</div>
+    <div id="pose-status">Pose 1 dari 3</div>
+    
+    <div id="booth-container">
+      <video id="camera" autoplay playsinline></video>
+      <img id="live-overlay" alt="" />
+      <div id="countdown" style="left: 50%; top: 40%; transform: translate(-50%, -50%);">3</div>
+    </div>
+
     <div id="controls">
-      <button id="snap-btn">Take Photo</button>
+      <button id="snap-btn">MULAI FOTO (3x)</button>
     </div>
   </div>
 
-  <!-- Result Preview Modal -->
+  <!-- Pop-up Preview hasil Akhir -->
   <div id="preview-modal">
-    <img id="result-preview" alt="Captured Photo" />
+    <img id="result-preview" alt="Hasil Foto Strip" />
     <div class="action-btns">
-      <button onclick="window.print()" style="background:#28a745; color:#fff;">Print / AirPrint</button>
-      <button onclick="downloadPhoto()" style="background:#007bff; color:#fff;">Save Image</button>
-      <button onclick="closePreview()" style="background:#555; color:#fff;">Retake</button>
+      <button onclick="window.print()" style="background:#28a745; color:#fff;">Cetak / Print 4R</button>
+      <button onclick="downloadPhoto()" style="background:#007bff; color:#fff;">Simpan Foto</button>
+      <button onclick="closePreview()" style="background:#555; color:#fff;">Kembali</button>
     </div>
   </div>
 
-  <!-- Admin Panel -->
+  <!-- Panel Admin untuk Upload Template -->
   <div id="admin-panel">
     <div class="admin-header">
-      <h2>Admin Template Manager</h2>
-      <button onclick="toggleAdmin(false)" style="background:#ff3b5c; color:#fff; padding:12px 24px; font-size:1rem;">Close</button>
+      <h2>Pengaturan Photobooth Zoom</h2>
+      <button onclick="toggleAdmin(false)" style="background:#ff3b5c; color:#fff; padding:12px 24px; font-size:1rem;">Simpan & Tutup</button>
     </div>
+
     <div class="card">
-      <h3>Upload New PNG Template</h3>
-      <p style="color:#aaa; font-size:0.95rem;">Upload a transparent PNG frame overlay (ideally sized to match iPad aspect ratio, e.g., 1920x1080px).</p>
-      <input type="file" id="template-upload" accept="image/png" />
+      <h3>1. Aturan Frame & Grid (Rasio 4R: 1200x1800 px)</h3>
+      <p style="color:#bbb; font-size:0.95rem;">Secara default, aplikasi akan mengambil 3 foto dan menumpuknya secara portrait dengan presisi otomatis.</p>
+      <div class="row">
+        <label>Warna Background: <input type="color" id="bg-color" value="#ffffff" onchange="saveSettings()" /></label>
+        <label>Jarak / Margin (px): <input type="number" id="gap-size" value="40" min="0" max="150" style="width:80px;" onchange="saveSettings()" /></label>
+        <label>Batas Branding Bawah (px): <input type="number" id="footer-size" value="260" min="0" max="600" style="width:90px;" onchange="saveSettings()" /></label>
+      </div>
     </div>
+
     <div class="card">
-      <h3>Current Active Template</h3>
-      <button onclick="clearTemplate()" style="background:#6c757d; color:#fff; padding:12px 20px; font-size:1rem; margin-top:10px;">Remove Current Frame</button>
+      <h3>2. Upload PNG Frame yang Transparan</h3>
+      <p style="color:#aaa; font-size:0.9rem;">Unggah gambar PNG ukuran <strong>1200x1800 px</strong> dengan lubang-lubang transparan (seperti template Groovy Baby Anda).</p>
+      <div class="row">
+        <input type="file" id="template-upload" accept="image/png" />
+        <button onclick="clearTemplate()" style="background:#6c757d; color:#fff; padding:10px 18px; font-size:0.95rem;">Hapus Frame</button>
+      </div>
+      <p id="overlay-status" style="margin-top:10px; font-size:0.95rem; color:#4ade80;"></p>
     </div>
   </div>
 
@@ -84,154 +174,8 @@
 
   <script>
     const video = document.getElementById('camera');
+    const container = document.getElementById('booth-container');
     const canvas = document.getElementById('canvas');
-    const overlay = document.getElementById('frame-overlay');
     const countdownEl = document.getElementById('countdown');
-    const previewModal = document.getElementById('preview-modal');
-    const resultPreview = document.getElementById('result-preview');
-
-    // 1. IndexedDB Setup for Offline Template Storage
-    let db;
-    const request = indexedDB.open('PhotoboothDB', 1);
-
-    request.onerror = () => console.error('IndexedDB error');
-    request.onsuccess = (e) => {
-      db = e.target.result;
-      loadTemplateFromDB();
-    };
-    request.onupgradeneeded = (e) => {
-      db = e.target.result;
-      if (!db.objectStoreNames.contains('settings')) {
-        db.createObjectStore('settings');
-      }
-    };
-
-    function saveTemplateToDB(dataUrl) {
-      const tx = db.transaction('settings', 'readwrite');
-      tx.objectStore('settings').put(dataUrl, 'active_template');
-      overlay.src = dataUrl;
-    }
-
-    function loadTemplateFromDB() {
-      if (!db) return;
-      const tx = db.transaction('settings', 'readonly');
-      const req = tx.objectStore('settings').get('active_template');
-      req.onsuccess = () => {
-        if (req.result) overlay.src = req.result;
-      };
-    }
-
-    function clearTemplateFromDB() {
-      const tx = db.transaction('settings', 'readwrite');
-      tx.objectStore('settings').delete('active_template');
-      overlay.src = '';
-    }
-
-    // 2. Initialize Front Camera
-    async function startCamera() {
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: 'user', width: { ideal: 1920 }, height: { ideal: 1080 } },
-          audio: false
-        });
-        video.srcObject = stream;
-      } catch (err) {
-        alert('Camera access denied or unavailable: ' + err.message);
-      }
-    }
-
-    // 3. Admin Upload Handler
-    document.getElementById('template-upload').addEventListener('change', (e) => {
-      const file = e.target.files[0];
-      if (!file) return;
-      const reader = new FileReader();
-      reader.onload = () => {
-        saveTemplateToDB(reader.result);
-        alert('New template saved successfully!');
-      };
-      reader.readAsDataURL(file);
-    });
-
-    function clearTemplate() {
-      clearTemplateFromDB();
-      alert('Template removed.');
-    }
-
-    // 4. Secret Admin Access (Tap top-left corner 3 times quickly)
-    let tapCount = 0;
-    document.getElementById('admin-trigger').addEventListener('click', () => {
-      tapCount++;
-      if (tapCount >= 3) {
-        tapCount = 0;
-        const pin = prompt('Enter Admin PIN (default: 1234):');
-        if (pin === '1234') {
-          toggleAdmin(true);
-        } else if (pin !== null) {
-          alert('Incorrect PIN');
-        }
-      }
-      setTimeout(() => tapCount = 0, 1200);
-    });
-
-    function toggleAdmin(show) {
-      document.getElementById('admin-panel').style.display = show ? 'block' : 'none';
-    }
-
-    // 5. Countdown & Capture Composite Image
-    document.getElementById('snap-btn').addEventListener('click', () => {
-      let count = 3;
-      countdownEl.style.display = 'block';
-      countdownEl.textContent = count;
-
-      const timer = setInterval(() => {
-        count--;
-        if (count > 0) {
-          countdownEl.textContent = count;
-        } else {
-          clearInterval(timer);
-          countdownEl.style.display = 'none';
-          capturePhoto();
-        }
-      }, 1000);
-    });
-
-    function capturePhoto() {
-      canvas.width = video.videoWidth || 1920;
-      canvas.height = video.videoHeight || 1080;
-      const ctx = canvas.getContext('2d');
-
-      // Draw mirrored camera feed
-      ctx.save();
-      ctx.scale(-1, 1);
-      ctx.drawImage(video, -canvas.width, 0, canvas.width, canvas.height);
-      ctx.restore();
-
-      // Draw PNG template overlay on top if present
-      if (overlay.src && overlay.complete) {
-        ctx.drawImage(overlay, 0, 0, canvas.width, canvas.height);
-      }
-
-      resultPreview.src = canvas.toDataURL('image/png');
-      previewModal.style.display = 'flex';
-    }
-
-    function closePreview() { 
-      previewModal.style.display = 'none'; 
-    }
-
-    function downloadPhoto() {
-      const a = document.createElement('a');
-      a.href = resultPreview.src;
-      a.download = `photobooth_${Date.now()}.png`;
-      a.click();
-    }
-
-    // Register Service Worker for PWA Offline Caching
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('./sw.js').catch(err => console.log('SW registration failed:', err));
-    }
-
-    startCamera();
-  </script>
-</body>
-</html>
+    const poseStatusEl = document.getElementById('pose-status');
+    const snapBtn = document
